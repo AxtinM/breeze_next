@@ -6,12 +6,21 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "mqtt:start": "docker-compose up -d",
+    "mqtt:stop": "docker-compose down",
+    "mqtt:logs": "docker-compose logs -f mosquitto",
+    "simulate": "node simulate_devices.js",
+    "setup": "pnpm install && docker-compose up -d"
   },
   "dependencies": {
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.0"
+    "next": "15.5.0",
+    "mqtt": "^5.9.1",
+    "lucide-react": "^0.469.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "typescript": "^5",

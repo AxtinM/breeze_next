@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# MQTT broker data (created by Docker)
+mqtt/data/
+mqtt/log/
+
+# Device emulator temp files
+/tmp/esp_*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
