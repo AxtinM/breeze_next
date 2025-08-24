@@ -11,26 +11,37 @@
     "mqtt:stop": "docker-compose down",
     "mqtt:logs": "docker-compose logs -f mosquitto",
     "simulate": "node simulate_devices.js",
-    "setup": "pnpm install && docker-compose up -d"
+    "setup": "pnpm install && docker-compose up -d",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop breeze-portal",
+    "pm2:restart": "pm2 restart breeze-portal",
+    "pm2:reload": "pm2 reload breeze-portal",
+    "pm2:delete": "pm2 delete breeze-portal",
+    "pm2:logs": "pm2 logs breeze-portal",
+    "pm2:monit": "pm2 monit",
+    "pm2:status": "pm2 status",
+    "production": "pnpm build && pnpm mqtt:start && pnpm pm2:start",
+    "production:stop": "pnpm pm2:stop && pnpm mqtt:stop"
   },
   "dependencies": {
+    "lucide-react": "^0.469.0",
+    "mqtt": "^5.9.1",
+    "next": "15.5.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.0",
-    "mqtt": "^5.9.1",
-    "lucide-react": "^0.469.0",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "15.5.0",
-    "@eslint/eslintrc": "^3"
+    "pm2": "^6.0.8",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }

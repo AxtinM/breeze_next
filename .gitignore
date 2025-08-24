@@ -47,6 +47,14 @@ mqtt/log/
 # Device emulator temp files
 /tmp/esp_*
 
+# PM2 logs and runtime files
+logs/
+.pm2/
+pids/
+*.pid
+*.seed
+*.pid.lock
+
 # IDE
 .vscode/
 .idea/
