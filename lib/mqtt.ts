@@ -91,7 +91,7 @@ class MQTTManager {
       }
 
       // Parse message - handle both JSON and plain text
-      let data: any;
+      let data: Record<string, unknown>;
       try {
         data = JSON.parse(messageStr);
       } catch {
@@ -147,7 +147,7 @@ class MQTTManager {
     }
   }
 
-  async publishCommand(deviceId: string, command: string, data: any): Promise<boolean> {
+  async publishCommand(deviceId: string, command: string, data: Record<string, unknown>): Promise<boolean> {
     if (!this.isConnected || !this.client) {
       console.error('❌ MQTT client not connected');
       return false;
