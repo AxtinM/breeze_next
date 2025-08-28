@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
         }
         
         // Send command to device via MQTT
-        mqttManager.publishDeviceCommand(deviceId, 'set_state', {
+        mqttManager.publishCommand(deviceId, 'set_state', {
           state: device.state
         });
 

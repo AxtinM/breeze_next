@@ -11,7 +11,10 @@ class MQTTManager {
     }
 
     try {
-      this.client = mqtt.connect('mqtt://localhost:1883', {
+      const brokerUrl = process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883';
+      console.log(`🔄 Connecting to MQTT broker: ${brokerUrl}`);
+      
+      this.client = mqtt.connect(brokerUrl, {
         clientId: `breeze_server_${Math.random().toString(16).substr(2, 8)}`,
         clean: true,
         connectTimeout: 4000,
@@ -19,145 +22,172 @@ class MQTTManager {
       });
 
       this.client.on('connect', () => {
-        console.log('MQTT Client connected');
+        console.log('✅ MQTT Client connected successfully');
         this.isConnected = true;
         this.subscribeToTopics();
       });
 
       this.client.on('error', (err) => {
-        console.error('MQTT connection error:', err);
+        console.error('❌ MQTT connection error:', err);
         this.isConnected = false;
       });
 
       this.client.on('message', this.handleMessage.bind(this));
 
       this.client.on('close', () => {
-        console.log('MQTT Client disconnected');
+        console.log('📴 MQTT Client disconnected');
         this.isConnected = false;
       });
 
     } catch (error) {
-      console.error('Failed to connect to MQTT broker:', error);
+      console.error('❌ Failed to connect to MQTT broker:', error);
     }
   }
 
   private subscribeToTopics() {
     if (!this.client || !this.isConnected) return;
 
-    // Subscribe to device discovery
-    this.client.subscribe('breeze/devices/+/discovery');
-    
-    // Subscribe to device status updates
-    this.client.subscribe('breeze/devices/+/status');
-    
-    // Subscribe to device state updates
-    this.client.subscribe('breeze/devices/+/state');
+    // ✅ Subscribe to all breeze topics with flexible patterns
+    const topics = [
+      'breeze/+/+/+',        // Support both old and new topic formats
+      'breeze/devices/+/+',  // Legacy format support
+      'breeze/devices/+/discovery',
+      'breeze/devices/+/status', 
+      'breeze/devices/+/state'
+    ];
 
-    console.log('Subscribed to MQTT topics');
+    topics.forEach(topic => {
+      this.client?.subscribe(topic, (err) => {
+        if (err) {
+          console.error(`❌ Failed to subscribe to ${topic}:`, err);
+        } else {
+          console.log(`📡 Subscribed to ${topic}`);
+        }
+      });
+    });
   }
 
   private handleMessage(topic: string, message: Buffer) {
     try {
       const messageStr = message.toString();
-      console.log(`Received MQTT message on ${topic}: ${messageStr}`);
+      console.log(`📨 MQTT Message: ${topic} -> ${messageStr}`);
       
+      // Extract device ID from topic - be flexible with topic formats
+      let deviceId = '';
       const topicParts = topic.split('/');
-      if (topicParts.length < 4) return;
+      
+      if (topicParts.length >= 3) {
+        // Support both breeze/devices/ID/type and breeze/ID/type formats
+        if (topicParts[1] === 'devices') {
+          deviceId = topicParts[2];
+        } else {
+          deviceId = topicParts[1];
+        }
+      }
 
-      const deviceId = topicParts[2];
-      const messageType = topicParts[3];
+      if (!deviceId) {
+        console.warn(`⚠️ Could not extract device ID from topic: ${topic}`);
+        return;
+      }
 
-      let data;
+      // Parse message - handle both JSON and plain text
+      let data: any;
       try {
         data = JSON.parse(messageStr);
       } catch {
-        data = { value: messageStr };
+        // Handle plain text messages
+        console.log(`📝 Plain text message: ${messageStr}`);
+        data = { raw_message: messageStr };
+        
+        // Try to interpret plain text as state
+        if (messageStr.toLowerCase() === 'on' || messageStr.toLowerCase() === 'off') {
+          data.state = messageStr.toLowerCase();
+        }
       }
 
-      switch (messageType) {
+      // Determine message type from topic
+      const lastPart = topicParts[topicParts.length - 1];
+      
+      switch (lastPart) {
         case 'discovery':
-          this.handleDeviceDiscovery(deviceId, data);
+          console.log(`🔍 Discovery message received: ${deviceId}`);
+          if (data.id || deviceId) {
+            data.id = data.id || deviceId;
+            deviceStore.addOrUpdateDevice(data);
+          }
           break;
+          
         case 'status':
-          this.handleDeviceStatus(deviceId, data);
+          console.log(`📊 Status message received: ${deviceId}`);
+          deviceStore.updateDeviceStatus(deviceId, data);
           break;
+          
         case 'state':
-          this.handleDeviceState(deviceId, data);
+          console.log(`🔄 State message received: ${deviceId}`);
+          deviceStore.updateDeviceState(deviceId, data);
+          break;
+          
+        default:
+          console.log(`📝 Generic message received: ${deviceId}`);
+          // Try to handle as discovery if it has device info
+          if (data.id || data.name || data.type) {
+            data.id = data.id || deviceId;
+            deviceStore.addOrUpdateDevice(data);
+          } else {
+            // Handle as status update
+            deviceStore.updateDeviceStatus(deviceId, data);
+          }
           break;
       }
+
     } catch (error) {
-      console.error('Error handling MQTT message:', error);
+      console.error('❌ Error handling MQTT message:', error);
+      console.error('Topic:', topic);
+      console.error('Message:', message.toString());
     }
   }
 
-  private handleDeviceDiscovery(deviceId: string, data: Record<string, unknown>) {
-    const existingDevice = deviceStore.getDevice(deviceId);
-    
-    if (!existingDevice) {
-      // New device discovered
-      deviceStore.addDevice({
-        id: deviceId,
-        name: (typeof data.name === 'string' ? data.name : null) || `Device ${deviceId}`,
-        type: (data.type === 'ESP32' || data.type === 'ESP8266' || data.type === 'ESP32-S3' || data.type === 'ESP32-C3') ? data.type : 'ESP32',
-        status: 'online',
-        state: (data.state === 'on' || data.state === 'off') ? data.state : 'off',
-        lastSeen: new Date(),
-        ipAddress: typeof data.ip === 'string' ? data.ip : undefined,
-        macAddress: typeof data.mac === 'string' ? data.mac : undefined,
-        firmwareVersion: typeof data.firmware === 'string' ? data.firmware : undefined,
-      });
-      console.log(`New device discovered: ${deviceId}`);
-    } else {
-      // Update existing device
-      deviceStore.updateDevice(deviceId, {
-        status: 'online',
-        ipAddress: typeof data.ip === 'string' ? data.ip : undefined,
-        lastSeen: new Date(),
-      });
-    }
-  }
-
-  private handleDeviceStatus(deviceId: string, data: Record<string, unknown>) {
-    deviceStore.updateDevice(deviceId, {
-      status: data.online === true ? 'online' : 'offline',
-      wifiStrength: typeof data.wifi_strength === 'number' ? data.wifi_strength : undefined,
-      uptime: typeof data.uptime === 'number' ? data.uptime : undefined,
-    });
-  }
-
-  private handleDeviceState(deviceId: string, data: Record<string, unknown>) {
-    deviceStore.updateDevice(deviceId, {
-      state: (data.state === 'on' || data.state === 'off') ? data.state : 'off',
-    });
-  }
-
-  publishDeviceCommand(deviceId: string, command: string, data: Record<string, unknown> = {}) {
-    if (!this.client || !this.isConnected) {
-      console.error('MQTT client not connected');
+  async publishCommand(deviceId: string, command: string, data: any): Promise<boolean> {
+    if (!this.isConnected || !this.client) {
+      console.error('❌ MQTT client not connected');
       return false;
     }
 
-    const topic = `breeze/devices/${deviceId}/command/${command}`;
-    const message = JSON.stringify(data);
-    
-    this.client.publish(topic, message, { qos: 1 }, (err) => {
-      if (err) {
-        console.error(`Failed to publish to ${topic}:`, err);
-      } else {
-        console.log(`Published command to ${topic}: ${message}`);
-      }
-    });
-
-    return true;
+    try {
+      const topic = `breeze/devices/${deviceId}/command/${command}`;
+      const payload = JSON.stringify(data);
+      
+      console.log(`📤 Publishing command: ${topic} -> ${payload}`);
+      
+      return new Promise((resolve) => {
+        this.client!.publish(topic, payload, (err) => {
+          if (err) {
+            console.error('❌ Error publishing MQTT command:', err);
+            resolve(false);
+          } else {
+            console.log('✅ Command published successfully');
+            resolve(true);
+          }
+        });
+      });
+    } catch (error) {
+      console.error('❌ Error publishing MQTT command:', error);
+      return false;
+    }
   }
 
-  disconnect() {
+  isClientConnected(): boolean {
+    return this.isConnected;
+  }
+
+  async disconnect() {
     if (this.client) {
-      this.client.end();
+      await this.client.endAsync();
       this.client = null;
       this.isConnected = false;
     }
   }
 }
 
+// Export singleton instance
 export const mqttManager = new MQTTManager();
